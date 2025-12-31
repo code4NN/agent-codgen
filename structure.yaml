@@ -1,0 +1,236 @@
+project_root: .
+
+directories:
+  agent:
+    files:
+      agent.py:
+        content: |
+          class Agent:
+              """
+              Primary reasoning agent.
+              Proposes next action based on screened state.
+              """
+
+              def decide(self, state_view):
+                  raise NotImplementedError("Agent decision logic not implemented")
+
+  controller:
+    files:
+      controller.py:
+        content: |
+          class Controller:
+              """
+              Enforces iteration bounds, hypothesis uniqueness,
+              and action validity. Does NOT reason.
+              """
+
+              def __init__(self, max_iterations=3):
+                  self.iteration = 0
+                  self.used_hypotheses = set()
+                  self.max_iterations = max_iterations
+
+              def allow(self, action):
+                  if action.hypothesis in self.used_hypotheses:
+                      return False, "Repeated hypothesis"
+                  if self.iteration >= self.max_iterations:
+                      return False, "Iteration limit reached"
+                  return True, "Approved"
+
+              def register(self, action):
+                  self.used_hypotheses.add(action.hypothesis)
+                  self.iteration += 1
+
+      state.py:
+        content: |
+          from enum import Enum
+
+          class ControllerState(str, Enum):
+              INIT = "INIT"
+              SPEC_READY = "SPEC_READY"
+              TESTS_READY = "TESTS_READY"
+              CODE_READY = "CODE_READY"
+              EXECUTED = "EXECUTED"
+              SUCCESS = "SUCCESS"
+              FAIL = "FAIL"
+
+      policies.py:
+        content: |
+          MAX_ITERATIONS = 3
+          MIN_CONFIDENCE = 0.75
+
+  tools:
+    files:
+      parse_problem.py: {}
+      clarify_problem.py: {}
+      normalize_spec.py:
+        content: |
+          def normalize_spec(spec):
+              """
+              Validates and locks the problem specification.
+              """
+              if spec.confidence < 0.75:
+                  raise ValueError("Low confidence problem spec")
+
+              for amb in spec.ambiguities:
+                  if amb.blocking:
+                      raise ValueError("Blocking ambiguity unresolved")
+
+              return spec
+
+      screen_state.py:
+        content: |
+          def screen_state(global_state):
+              """
+              Produce a reduced, relevant view of state for the agent.
+              Does NOT mutate global state.
+              """
+              return {
+                  "controller_state": global_state.get("controller_state"),
+                  "locked_spec": global_state.get("problem_spec"),
+                  "last_error": global_state.get("last_error"),
+                  "failed_hypotheses": list(global_state.get("failed_hypotheses", []))
+              }
+
+      generate_tests.py: {}
+      generate_code.py: {}
+      debug_code.py: {}
+      execute_code.py:
+        content: |
+          def execute_code(code: str, tests: list):
+              """
+              Executes code against tests.
+              Executor is the ONLY oracle.
+              """
+              try:
+                  exec_globals = {}
+                  exec(code, exec_globals)
+              except Exception as e:
+                  return {"passed": False, "error": str(e)}
+
+              fn = list(exec_globals.values())[-1]
+
+              for test in tests:
+                  try:
+                      output = fn(*test.inputs)
+                      if test.assertion_type == "exact":
+                          if output != test.expected:
+                              return {"passed": False, "error": "Assertion failed"}
+                  except Exception as e:
+                      return {"passed": False, "error": str(e)}
+
+              return {"passed": True, "error": None}
+
+  contracts:
+    files:
+      problem_spec.py:
+        content: |
+          from typing import List, Literal
+          from pydantic import BaseModel
+
+          class Argument(BaseModel):
+              name: str
+              type: str
+
+          class Ambiguity(BaseModel):
+              description: str
+              options: List[str]
+              default: str
+              blocking: bool
+
+          class ProblemSpec(BaseModel):
+              function_name: str
+              inputs: List[Argument]
+              output_type: str
+              input_mode: Literal["positional", "keyword"]
+              multiple_valid_outputs: bool
+              edge_cases: List[str]
+              ambiguities: List[Ambiguity]
+              confidence: float
+
+      action.py:
+        content: |
+          from typing import Literal
+          from pydantic import BaseModel
+
+          class Action(BaseModel):
+              intent: Literal[
+                  "parse_problem",
+                  "clarify_problem",
+                  "generate_tests",
+                  "generate_code",
+                  "execute_code",
+                  "debug",
+                  "abstain"
+              ]
+              hypothesis: str
+              tool: str
+              rationale: str
+
+      test_case.py:
+        content: |
+          from typing import Any, Literal
+          from pydantic import BaseModel
+
+          class TestCase(BaseModel):
+              inputs: Any
+              expected: Any
+              assertion_type: Literal["exact", "set", "predicate"]
+              justification: str
+
+  memory:
+    files:
+      run_memory.py:
+        content: |
+          class RunMemory:
+              """
+              Tracks failed hypotheses within a single run.
+              """
+
+              def __init__(self):
+                  self.failed = set()
+
+              def add(self, hypothesis: str):
+                  self.failed.add(hypothesis)
+
+              def seen(self, hypothesis: str) -> bool:
+                  return hypothesis in self.failed
+
+  examples:
+    directories:
+      problems:
+        files:
+          two_sum.txt: {}
+          palindrome.txt: {}
+          ambiguous_problem.txt: {}
+      specs:
+        files:
+          two_sum.json: {}
+      tests:
+        files:
+          two_sum_tests.json: {}
+
+  tests:
+    files:
+      test_parse_problem.py: {}
+      test_normalize_spec.py: {}
+      test_controller_loop.py: {}
+      test_executor.py: {}
+
+files:
+  main.py:
+    content: |
+      def main():
+          print("CodeGen v2 initialized")
+
+      if __name__ == "__main__":
+          main()
+
+  README.md:
+    content: |
+      # CodeGen v2
+
+      Generic agentic framework.
+
+      - Agent proposes actions
+      - Controller enforces discipline
+      - Tools execute reality
