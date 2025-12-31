@@ -215,6 +215,83 @@ directories:
       test_normalize_spec.py: {}
       test_controller_loop.py: {}
       test_executor.py: {}
+  
+  llm:
+    files:
+      base.py:
+        content: |
+          from abc import ABC, abstractmethod
+          from llm.types import LLMRequest, LLMResponse
+
+          class BaseLLMClient(ABC):
+              """
+              Abstract base class for all LLM clients.
+              """
+
+              @abstractmethod
+              def generate(self, request: LLMRequest) -> LLMResponse:
+                  pass
+
+      types.py:
+        content: |
+          from typing import Optional, Dict
+          from pydantic import BaseModel
+
+          class LLMRequest(BaseModel):
+              prompt: str
+              system_prompt: Optional[str] = None
+              temperature: float = 0.0
+              max_tokens: int = 512
+
+          class LLMResponse(BaseModel):
+              text: str
+              raw: Dict
+
+      client.py:
+        content: |
+          from llm.registry import get_llm_client
+          from llm.types import LLMRequest
+
+          def call_llm(model: str, **kwargs):
+              client = get_llm_client(model)
+              request = LLMRequest(**kwargs)
+              return client.generate(request)
+
+      registry.py:
+        content: |
+          from llm.openai_client import OpenAIClient
+          from llm.gemini_client import GeminiClient
+
+          def get_llm_client(model: str):
+              if model.startswith("gpt"):
+                  return OpenAIClient(model)
+              if model.startswith("gemini"):
+                  return GeminiClient(model)
+              raise ValueError(f"Unknown model: {model}")
+
+      openai_client.py:
+        content: |
+          from llm.base import BaseLLMClient
+          from llm.types import LLMRequest, LLMResponse
+
+          class OpenAIClient(BaseLLMClient):
+              def __init__(self, model: str):
+                  self.model = model
+
+              def generate(self, request: LLMRequest) -> LLMResponse:
+                  raise NotImplementedError("OpenAI client not wired yet")
+
+      gemini_client.py:
+        content: |
+          from llm.base import BaseLLMClient
+          from llm.types import LLMRequest, LLMResponse
+
+          class GeminiClient(BaseLLMClient):
+              def __init__(self, model: str):
+                  self.model = model
+
+              def generate(self, request: LLMRequest) -> LLMResponse:
+                  raise NotImplementedError("Gemini client not wired yet")
 
 files:
   main.py:
